@@ -22,3 +22,7 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+# Local files
+changeprimarydomain
+client_secret*
