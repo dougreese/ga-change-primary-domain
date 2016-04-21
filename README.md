@@ -26,7 +26,7 @@ go run changeprimarydomain.go -new-domain my-new-primary-domain.com -old-domain 
 
 ```
 go build changeprimarydomain.go
-./changeprimarydomain.go -new-domain my-new-primary-domain.com -old-domain my-old-promary-domain.com
+./changeprimarydomain -new-domain my-new-primary-domain.com -old-domain my-old-promary-domain.com
 ```
 
 ## Notes
