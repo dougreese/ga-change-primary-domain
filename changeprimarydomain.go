@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,15 +11,22 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/admin/directory/v1"
+
+	"./lib"
 )
 
 var newDomain string
+var oldDomain string
+
+func init() {
+	flag.StringVar(&newDomain, "new-domain", "", "New primary domain")
+	flag.StringVar(&oldDomain, "old-domain", "", "Old primary domain")
+}
 
 // getClient uses a Context and Config to retrieve a Token
 // then generate a Client. It returns the generated Client.
@@ -92,11 +100,24 @@ func saveToken(file string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		log.Fatalln("Pass new domain name as the only parameter.")
+// hasAlias checks to see if a user already has a given email alias.
+func hasAlias(alias string, aliases []string) bool {
+	for _, a := range aliases {
+		if alias == a {
+			return true
+		}
 	}
-	newDomain = os.Args[1]
+	return false
+}
+
+func main() {
+	flag.Parse()
+
+	if oldDomain == "" || newDomain == "" {
+		flag.PrintDefaults()
+		log.Fatal("Try again.")
+	}
+	log.Printf("Changing primary domain - old domain: %s, new domain: %s", oldDomain, newDomain)
 
 	ctx := context.Background()
 
@@ -109,74 +130,21 @@ func main() {
 	// at ~/.credentials/changeprimarydomain-<new domain>.json
 	config, err := google.ConfigFromJSON(b,
 		admin.AdminDirectoryUserScope,
-		admin.AdminDirectoryCustomerScope)
+		admin.AdminDirectoryCustomerScope,
+		admin.AdminDirectoryGroupScope)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}
 	client := getClient(ctx, config)
 
-	srv, err := admin.New(client)
+	dc, err := lib.NewDomainChanger(client, oldDomain, newDomain)
 	if err != nil {
-		log.Fatalf("Unable to retrieve directory Client %v", err)
+		log.Fatalf("Unable to initialize domain changer: %v", err)
 	}
 
-	// Retrieve customer/domain data
-	cust, err := srv.Customers.Get("my_customer").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve customer data.", err)
-	}
-
-	// Confirm changing primary domain
-	fmt.Printf("About to update customer Id %s primary domain from %s to %s, continue? (y/n): ",
-		cust.Id, cust.CustomerDomain, newDomain)
-	var code string
-	if _, err := fmt.Scan(&code); err != nil {
-		log.Fatalf("Unable to read authorization code %v", err)
-	}
-	if strings.ToLower(code) != "y" {
-		log.Fatalln("Abort!")
-	}
-
-	// Update customer domain
-	fmt.Printf("\nUpdating customer Id %s primary domain from %s to %s ... ", cust.Id, cust.CustomerDomain, newDomain)
-
-	custKey := cust.Id
-	custUpdate := admin.Customer{
-		CustomerDomain: newDomain,
-	}
-	cust, err = srv.Customers.Update(custKey, &custUpdate).Do()
-	if err != nil {
-		log.Fatalf("Unable to update customer primary domain. %s", err)
-	}
-	fmt.Printf("Done.\n\n")
-
-	// Update all users
-	ru, err := srv.Users.List().Customer("my_customer").MaxResults(50).
-		OrderBy("email").Do()
-	if err != nil {
-		log.Fatalf("Unable to retrieve users in domain. %s", err)
-	}
-
-	if len(ru.Users) == 0 {
-		fmt.Print("No users found.\n")
-	} else {
-		fmt.Print("Users:\n")
-		for _, u := range ru.Users {
-			// fmt.Printf("%+v\n", u)
-
-			addrParts := strings.Split(u.PrimaryEmail, "@")
-			addrParts[1] = newDomain
-			emailUpdate := strings.Join(addrParts, "@")
-			fmt.Printf("Changing primary domain for: %s (%s) to %s ... ", u.PrimaryEmail, u.Name.FullName, emailUpdate)
-			u.PrimaryEmail = emailUpdate
-
-			u2, err2 := srv.Users.Update(u.Id, u).Do()
-			if err2 != nil {
-				log.Fatalf("Unable to update user: %s - %s\n", u2.Name.FullName, err2)
-			}
-			fmt.Printf("Done.\n")
-		}
-	}
+	dc.ChangePrimaryDomain()
+	dc.UpdateUsers()
+	dc.UpdateGroups()
 
 	fmt.Printf("\nProcess complete.\n")
 }

@@ -14,24 +14,26 @@ This is a tool to change Google Apps primary domain and rename all users, using 
 
 1. Set up your access to the Google API as described in the resources above
 2. Download the client_secret.json file from the developer console, place in the same directory as this project
-2. Build and run (or just run) the tool, passing in the new domain as the only parameter
+2. Build and run (or just run) the tool, passing the new and old domains as parameters
 3. Go to the URL displayed, which will perform the proper auth, paste token into console when prompted
 4. Confirm and off you go...
 
 ## Examples
 
 ```
-go run changeprimarydomain.go my-new-primary-domain.com
+go run changeprimarydomain.go -new-domain my-new-primary-domain.com -old-domain my-old-promary-domain.com
 ```
 
 ```
 go build changeprimarydomain.go
-./changeprimarydomain.go my-new-primary-domain.com
+./changeprimarydomain.go -new-domain my-new-primary-domain.com -old-domain my-old-promary-domain.com
 ```
 
 ## Notes
 
 * Works on OS X and Linux, unknown if this will work properly on Windows
 * Based on the [Google Directory API Go Quickstart](https://developers.google.com/admin-sdk/directory/v1/quickstart/go)
-* To deleted the cached auth credentials, remove the `~/.credentials/changeprimarydomain-<new domain>.json` file
+* To delete the cached auth credentials, remove the `~/.credentials/changeprimarydomain-<new domain>.json` file
   * Example: `rm ~/.credentials/changeprimarydomain-my-new-primary-domain.com.json`
+* The 'Before you change your primary domain' document does not mention anything about renaming groups, but this console app does rename and alias all groups attached to the account
+* This console app can be run multiple times for the same new and old domains with no negative ramifications
